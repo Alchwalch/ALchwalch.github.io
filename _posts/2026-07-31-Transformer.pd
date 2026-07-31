@@ -1,0 +1,17 @@
+---
+title: "Transformer"
+date: 2026-07-31 18:30:00 +0900
+math: true
+categories: [DeepLearning]
+tags: [DeepLearning]
+---
+
+## Reference
+
+[Attention Is All You Need](https://arxiv.org/pdf/1706.03762)
+
+밑바닥 부터 만들면서 배우는 LLM
+
+## Self Attention
+
+일하기 싫다.
