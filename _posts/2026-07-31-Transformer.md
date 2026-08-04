@@ -20,3 +20,11 @@ Attention is all you need는 딥러닝의 근간을 바꾼 논문이라고 해�
 
 ## Self Attention
 
+![Transformer1](assets/img/transformer1.png)
+
+![Transformer2](assets/img/transformer2.png)
+
+![Transformer3](assets/img/transformer3.png)
+
+![Transformer4](assets/img/transformer4.png)
+
