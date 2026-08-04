@@ -34,6 +34,8 @@ Attention is all you need는 딥러닝의 근간을 바꾼 논문이라고 해�
 
 ![Transformer3](assets/img/transformer3.png)
 
+이제 Transformer에서 쓰는 Attention의 구조에 대해 살펴보자. query,key,value를 각각 Q,K,V라고 하자. 이때, 디코더에서 인코더의 값을 가져올 때 기존에 썼던 어텐션을 생각해보면 Q에서 가져옴을 알 수 있다. 입력의 시퀀스 길이가 N이라 하고 decorder의 시퀀스 길이를 M이라 하고 임베딩 차원을 $d_k$라 하자. 이때, Q, K, V의 차원은 각각 $N \dot d_k$  
+
 ![Transformer2](assets/img/transformer2.png)
 
 ![Transformer4](assets/img/transformer4.png)
