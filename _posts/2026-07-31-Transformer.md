@@ -18,7 +18,9 @@ Attention is all you need는 딥러닝의 근간을 바꾼 논문이라고 해�
 
 밑바닥 부터 만들면서 배우는 LLM
 
-## Self Attention
+## Attention
+
+### Self Attention
 
 ![Transformer1](assets/img/transformer1.png)
 
@@ -26,7 +28,7 @@ Attention is all you need는 딥러닝의 근간을 바꾼 논문이라고 해�
 
 - 시간 복잡도가 줄어듦
 
-기존 Recurrent 레이어나 Convolutional 레이어에선 $O(n \dot d^2)$ $O(k \dot n \dot d^2)$ 인 차원이 square형태로 나타나지만 Self_attention에선 시간복잡도가 O(n^2 \dot d)이다. 시퀀스 길이인 n보단 단어 임베딩 차원인 d가 더 숫자가 높다는 측면에서 Self-attention의 시간복잡도는 효율적이다. 더 자세한 내용은 [논문](https://arxiv.org/pdf/1706.03762)의 4절을 참고하자.
+기존 Recurrent 레이어나 Convolutional 레이어에선 $O(n \cdot d^2)$ $O(k \cdot n \cdot d^2)$ 인 차원이 square형태로 나타나지만 Self_attention에선 시간복잡도가 O(n^2 \cdot d)이다. 시퀀스 길이인 n보단 단어 임베딩 차원인 d가 더 숫자가 높다는 측면에서 Self-attention의 시간복잡도는 효율적이다. 더 자세한 내용은 [논문](https://arxiv.org/pdf/1706.03762)의 4절을 참고하자.
 
 - **멀리 떨어져 있는 단어여도 의존성을 유지할 수 있음.**
 
@@ -34,9 +36,39 @@ Attention is all you need는 딥러닝의 근간을 바꾼 논문이라고 해�
 
 ![Transformer3](assets/img/transformer3.png)
 
-이제 Transformer에서 쓰는 Attention의 구조에 대해 살펴보자. query,key,value를 각각 Q,K,V라고 하자. 이때, 디코더에서 인코더의 값을 가져올 때 기존에 썼던 어텐션을 생각해보면 Q에서 가져옴을 알 수 있다. 입력의 시퀀스 길이가 N이라 하고 decorder의 시퀀스 길이를 M이라 하고 임베딩 차원을 $d_k$라 하자. 이때, Q, K, V의 차원은 각각 $N \dot d_k$  
+### Scaled Dot-Product Attention
+
+이제 Transformer에서 쓰는 Attention의 구조에 대해 살펴보자. query,key,value를 각각 Q,K,V라고 하자. 이때, 디코더에서 인코더의 값을 가져올 때 기존에 썼던 어텐션을 생각해보면 K와 V에서 가져옴을 알 수 있다. 입력의 시퀀스 길이가 M이라 하고 decorder의 시퀀스 길이를 N이라 하고 임베딩 차원을 $d_k$라 하자. 이때, Q, K, V의 차원은 각각 $N \times d_k$  $M \times d_k$  $M \times d_k$ 이다. 그리고 가중치(a)를 나타내면 다음과 같이 표현할 수 있다.  
+
+$$\text{softmax}\left(\frac{QK^T}{\sqrt{d_k}}\right)$$
+
+$\sqrt{d_k}$ 로 나누는 이유는 softmax로 확률을 표현할 때 분산값을 줄이기 위함이다. 최종적으로 (Mask(Opt.)를 제외하고) attention값을 나타내면 다음과 같이 나타낼 수 있다. 여기서 attention의 차원은 $N \times d_k$ 이다.
+
+$$\text{Attention}(Q, K, V) = \text{softmax}\left(\frac{QK^T}{\sqrt{d_k}}\right)V$$
+
+### Multi Head Attention
 
 ![Transformer2](assets/img/transformer2.png)
+
+$$\text{MultiHead}(Q, K, V) = \text{Concat}(\text{head}_1, ..., \text{head}_h)W^O$$
+
+$$\text{where head}_i = \text{Attention}(QW_i^Q, KW_i^K, VW_i^V)$$
+
+### Self-Attention에서 masking 처리
+
+## Architecture
+
+### Feedforward
+
+$$\text{FFN}(x) = \max(0, xW_1 + b_1)W_2 + b_2$$
+
+### Positional Encoding
+
+$$PE_{(pos, 2i)} = \sin(pos / 10000^{2i/d_{\text{model}}})$$
+
+$$PE_{(pos, 2i+1)} = \cos(pos / 10000^{2i/d_{\text{model}}})$$
+
+### Overall
 
 ![Transformer4](assets/img/transformer4.png)
 
