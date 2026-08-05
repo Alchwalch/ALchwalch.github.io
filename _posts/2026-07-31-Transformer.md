@@ -58,7 +58,13 @@ $$\text{MultiHead}(Q, K, V) = \text{Concat}(\text{head}_1, ..., \text{head}_h)W^
 
 $$\text{where head}_i = \text{Attention}(QW_i^Q, KW_i^K, VW_i^V)$$
 
-### Casual attention
+### Causal attention
+
+Self-Attention에서 Q와 K를 내적하고 그 가중치를 그대로 내보내면 문제가 생긴다. 가중치를 토대로 V가 내적을 해서 값을 내보내는데. 이때, V는 Q에 대한 토큰의 정보와 내적하면서 값을 내보낸다. Q의 기준에선 그 뒤에 어떤 정보가 올 지 몰라야 된다.
+
+![Transformer3-1](assets/img/transformer3.png)
+
+![Transformer2-1](assets/img/transformer2.png)
 
 ## Architecture
 
