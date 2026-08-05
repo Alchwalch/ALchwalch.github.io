@@ -50,11 +50,15 @@ $$\text{Attention}(Q, K, V) = \text{softmax}\left(\frac{QK^T}{\sqrt{d_k}}\right)
 
 ![Transformer2](assets/img/transformer2.png)
 
+모델을 훈련하면서 파라미터를 갱신하거나 그래야 하는데 위에 본 Scaled Dot-Product에선 파라미터가 없다. 그래서 Q,K,V 들어오는곳과 최종 결과에서 Linear fc를 쓴다. 여기서 각각 가중치를 $W^Q$ $W^K$ $W^V$ $W^O$라 하자.
+
+여기서 representation을 하나만 뽑는것 보단 여러개를 뽑는게 직관적으로 이득이다. 그래서 h개수 만큼 Scaled-dot product를 둔다. 입력할 때의 차원과 출력의 차원은 같다. 멀티헤드 어텐션에서 하나의 scaled_dot product의 차원을 $d_k$라 하고 입력했을때의 차원은 $d_{model}$이라고 했을때, $d_k= d_{model}/h$ 이다. 논문에선 $h=8$ 이고 $d_k=64$ 이다.
+
 $$\text{MultiHead}(Q, K, V) = \text{Concat}(\text{head}_1, ..., \text{head}_h)W^O$$
 
 $$\text{where head}_i = \text{Attention}(QW_i^Q, KW_i^K, VW_i^V)$$
 
-### Self-Attention에서 masking 처리
+### Casual attention
 
 ## Architecture
 
