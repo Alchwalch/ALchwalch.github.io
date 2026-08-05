@@ -62,7 +62,9 @@ $$\text{where head}_i = \text{Attention}(QW_i^Q, KW_i^K, VW_i^V)$$
 
 Self-Attention에서 Q와 K를 내적하고 그 가중치를 그대로 내보내면 문제가 생긴다. 가중치를 토대로 V가 내적을 해서 값을 내보내는데. 이때, V는 Q에 대한 토큰의 정보와 내적하면서 값을 내보낸다. Q의 기준에선 그 뒤에 어떤 정보가 올 지 몰라야 된다.
 
-![Transformer3-1](assets/img/transformer3.png)
+![Transformer5](assets/img/transformer5.png)
+
+예를 들어, Q 입장에선 "Your jorney starts" 까지 봤다면 "with one step" 에 대한 정보는 누락되어야 한다. 그래서 위 그림과 같이 해당부분을 $-\inf$ 값으로 만들어 버리고 나머지 부분에 대해 softmax를 진행한다.
 
 ![Transformer2-1](assets/img/transformer2.png)
 
