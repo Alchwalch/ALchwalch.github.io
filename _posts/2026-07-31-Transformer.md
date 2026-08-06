@@ -18,6 +18,8 @@ Attention is all you need는 딥러닝의 근간을 바꾼 논문이라고 해�
 
 밑바닥 부터 만들면서 배우는 LLM
 
+[Pytorch Transformers from Scratch](https://www.youtube.com/watch?v=U0s0f995w14)
+
 ## Attention
 
 ### Self Attention
@@ -393,3 +395,5 @@ class Transformer(nn.Module):
 
     return out
 ```
+
+## generate text
