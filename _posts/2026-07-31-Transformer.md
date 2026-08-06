@@ -249,5 +249,147 @@ TRANSFORMER_BASE_CONFIG={
 
 ![Transformer4-1](assets/img/transformer4.png)
 
-아무튼 구조가 위에 것과 같이 나타나는데 Encoder와 Decoder블럭이 각각 N개(6개)씩 이어져 있고 그리고 그걸 다 받는 Encoder_block Decoder_block을 만들어야 된다.
+아무튼 구조가 위에 것과 같이 나타나는데 Encoder와 Decoder블럭이 각각 N개(6개)씩 이어져 있고 그리고 그걸 다 받는 Encoder_block Decoder_block을 만들어야 된다. 여기서 부터는 말로 설명하는 것 보단 코드로 그대로 이해하는게 더 편할거 같아서 병렬적으로 제시하겠다.
 
+- Encoder
+
+```python
+class EncoderBlock(nn.Module):
+  def __init__(self,cfg):
+    super(EncoderBlock,self).__init__()
+    self.attention=SelfAttention(cfg["d_model"],cfg["n_heads"],cfg["drop_attn"])
+    self.norm1=nn.LayerNorm(cfg["d_model"])
+    self.drop1=nn.Dropout(cfg["drop_res"])
+
+    self.feed_forward=FeedForward(cfg["d_model"])
+    self.norm2=nn.LayerNorm(cfg["d_model"])
+    self.drop2=nn.Dropout(cfg["drop_res"])
+
+  def forward(self,x,mask=None):
+    shortcut=x
+    x=self.attention(x,x,x,mask)
+    x=self.drop1(x)
+    x=self.norm1(x+shortcut)
+
+    shortcut=x
+    x=self.feed_forward(x)
+    x=self.drop2(x)
+    x=self.norm2(x+shortcut)
+
+    return x
+```
+
+```python
+class Encoder(nn.Module):
+  def __init__(self,cfg):
+    super(Encoder,self).__init__()
+    self.word_embedding=nn.Embedding(cfg["vocab_size"],cfg["d_model"])
+    self.pos_embedding=PositionalEncoding(cfg["d_model"],cfg["max_len"])
+    self.drop=nn.Dropout(cfg["drop_emb"])
+    self.layers=nn.ModuleList([EncoderBlock(cfg) for _ in range(cfg["n_layers"])])
+
+  def forward(self,idx,mask=None):
+    x=self.word_embedding(idx)
+    x=self.pos_embedding(x)
+    x=self.drop(x)
+
+    for layer in self.layers:
+      x=layer(x,mask)
+
+    return x
+```
+
+- Decoder
+
+encoder_out에서 encoder의 최종 출력을 받으면 된다.
+
+```python
+class DecoderBlock(nn.Module):
+  def __init__(self,cfg):
+    super(DecoderBlock,self).__init__()
+    self.masked_attention=SelfAttention(cfg["d_model"],cfg["n_heads"],cfg["drop_attn"])
+    self.norm1=nn.LayerNorm(cfg["d_model"])
+    self.drop1=nn.Dropout(cfg["drop_res"])
+
+    self.attention=SelfAttention(cfg["d_model"],cfg["n_heads"],cfg["drop_attn"])
+    self.norm2=nn.LayerNorm(cfg["d_model"])
+    self.drop2=nn.Dropout(cfg["drop_res"])
+
+    self.feed_forward=FeedForward(cfg["d_model"])
+    self.norm3=nn.LayerNorm(cfg["d_model"])
+    self.drop3=nn.Dropout(cfg["drop_res"])
+
+  def forward(self,x,encoder_out,trg_mask,src_mask=None):
+    shortcut=x
+    x=self.masked_attention(x,x,x,trg_mask)
+    x=self.drop1(x)
+    x=self.norm1(x+shortcut)
+
+    shortcut=x
+    x=self.attention(x,encoder_out,encoder_out,src_mask)
+    x=self.drop2(x)
+    x=self.norm2(x+shortcut)
+
+    shortcut=x
+    x=self.feed_forward(x)
+    x=self.drop3(x)
+    x=self.norm3(x+shortcut)
+
+    return x
+```
+
+```python
+class Decoder(nn.Module):
+  def __init__(self,cfg):
+    super(Decoder,self).__init__()
+    self.word_embedding=nn.Embedding(cfg["vocab_size"],cfg["d_model"])
+    self.pos_embedding=PositionalEncoding(cfg["d_model"],cfg["max_len"])
+    self.drop=nn.Dropout(cfg["drop_emb"])
+    self.layers=nn.ModuleList([DecoderBlock(cfg) for _ in range(cfg["n_layers"])])
+    self.fc=nn.Linear(cfg["d_model"],cfg["vocab_size"])
+    self.softmax=nn.Softmax(dim=-1)
+
+  def forward(self,idx,encoder_out,trg_mask,src_mask=None):
+    x=self.word_embedding(idx)
+    x=self.pos_embedding(x)
+    x=self.drop(x)
+
+    for layer in self.layers:
+      x=layer(x,encoder_out,trg_mask,src_mask)
+
+    x=self.fc(x)
+
+    return x
+```
+
+- Transformer
+
+```python
+class Transformer(nn.Module):
+  def __init__(self,cfg):
+    super(Transformer,self).__init__()
+    self.encoder=Encoder(cfg)
+    self.decoder=Decoder(cfg)
+    self.device=cfg["device"]
+    self.pad_idx = cfg["pad_idx"]
+
+  def make_src_mask(self,src):
+    batch_size,seq_len=src.shape
+    mask = (src != self.pad_idx).unsqueeze(1).unsqueeze(2)
+    return mask.to(self.device)
+
+  def make_trg_mask(self,trg):
+    batch_size, seq_len = trg.shape
+    pad_mask = (trg != self.pad_idx).unsqueeze(1).unsqueeze(2)
+    causal_mask = torch.tril(torch.ones(seq_len, seq_len, device=self.device)).bool()
+    causal_mask = causal_mask.unsqueeze(0).unsqueeze(0)
+    return (pad_mask & causal_mask).to(self.device)
+
+  def forward(self,src,trg):
+    src_mask=self.make_src_mask(src)
+    trg_mask=self.make_trg_mask(trg)
+    encoder_out=self.encoder(src,src_mask)
+    out=self.decoder(trg,encoder_out,trg_mask,src_mask)
+
+    return out
+```
