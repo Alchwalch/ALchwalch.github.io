@@ -64,23 +64,125 @@ Self-Attention에서 Q와 K를 내적하고 그 가중치를 그대로 내보내
 
 ![Transformer5](assets/img/transformer5.png)
 
-예를 들어, Q 입장에선 "Your jorney starts" 까지 봤다면 "with one step" 에 대한 정보는 누락되어야 한다. 그래서 위 그림과 같이 해당부분을 $-\inf$ 값으로 만들어 버리고 나머지 부분에 대해 softmax를 진행한다.
+예를 들어, Q 입장에선 "Your jorney starts" 까지 봤다면 "with one step" 에 대한 정보는 누락되어야 한다. 그래서 위 그림과 같이 해당 부분을 아예 없었던 것처럼 처리하면 된다. 
 
 ![Transformer2-1](assets/img/transformer2.png)
 
+Mask레이어에서 해당 부분을 $-\infty$ 값으로 만들어 버리고 나머지 부분에 대해 softmax를 진행한다.
+
+### 코드
+
+```python
+class SelfAttention(nn.Module):
+  def __init__(self, d_model, heads, dropout=0.0,qkv_bias=False):
+    super(SelfAttention, self).__init__()
+    assert (d_model % heads == 0), "d_model must be divisible by heads"
+
+    self.d_model = d_model
+    self.heads = heads
+    self.head_dim = d_model // heads
+
+    self.query= nn.Linear(d_model,d_model,bias=qkv_bias)
+    self.key= nn.Linear(d_model,d_model,bias=qkv_bias)
+    self.value= nn.Linear(d_model,d_model,bias=qkv_bias)
+    self.out_fc=nn.Linear(d_model,d_model)
+    self.dropout=nn.Dropout(dropout)
+
+
+  def forward(self, q, k, v, mask=None):
+    batch_size=q.shape[0]
+    q_len,k_len,v_len=q.shape[1],k.shape[1],v.shape[1]
+
+    q = self.query(q)
+    k = self.key(k)
+    v = self.value(v)
+
+    q=q.view(batch_size,q_len,self.heads,self.head_dim)
+    k=k.view(batch_size,k_len,self.heads,self.head_dim)
+    v=v.view(batch_size,v_len,self.heads,self.head_dim)
+
+    energy=torch.einsum("nqhd,nkhd->nhqk",[q,k])
+
+    if mask is not None:
+      energy=energy.masked_fill(mask==0,-torch.inf)
+
+    attention=torch.softmax(energy/(self.head_dim**(1/2)),dim=-1)
+    attention=self.dropout(attention)
+
+    out=torch.einsum("nhql,nlhd->nqhd",[attention,v])
+    out=out.reshape(batch_size,q_len,self.d_model)
+
+    return self.out_fc(out)
+```
+
 ## Architecture
+
+Attention부분을 마쳤으므로 나머지 레이어에 대해서 살펴보자. 크게 FeedForward 부분과 Add&Norm, Embedding 부분에서 Positional Encoding을 볼 수 있다. 전체적인 구조는 아래와 같다.
+
+![Transformer4](assets/img/transformer4.png)
+
+### Add & Norm
+
+Add는 shortcut으로 Resnet에서 본 것과 같다. 위 그림과 같이 전 레이어의 입력값과 출력값을 더하는 것이다.
+
+Norm이 중요한데 여기서는 Layer-Norm을 뜻한다. 임베딩 값들에 대하여 하나하나를 정규화한다. 단어별로 정규화 시켜야 포화 상태를 줄일 수 있다.
 
 ### Feedforward
 
+우리가 아는 단순한 NLP나열이다. 이 레이어의 역할을 표현력을 높이는 레이어이며 hidden_layer가 하나인데 차원이 입력값보다 4배 크다. 활성화 함수를 ReLU로 했을 때, 아래와 같다.
+
 $$\text{FFN}(x) = \max(0, xW_1 + b_1)W_2 + b_2$$
 
+최근에는 ReLU대신 GELU활성화 함수를 쓴다. 코드로 나타내면 다음과 같다.
+
+```pythonclass
+FeedForward(nn.Module):
+  def __init__(self,d_model):
+    super(FeedForward,self).__init__()
+    self.layers=nn.Sequential(
+        nn.Linear(d_model,d_model*4),
+        nn.ReLU(),
+        nn.Linear(d_model*4,d_model)
+    )
+
+  def forward(self,x):
+    return self.layers(x)
+```
+
 ### Positional Encoding
+
+시퀀스에서 다른 위치에서 같은 단어가 등장할 때, 단어들의 위치가 어떻게 되는지 정보를 넣어주는 것이 좋다. 최근에는 단어 위치마다 차원이 같은 임베딩 벡터를 만들어 단순히 더하는 정도로 구현이 편하지만 이 논문에서는 Sinusoidal version을 쓴다. i를 단어 하나에서 임베딩 위치로 하고 *pos*를 시퀀스에서 단어의 위치로 표현하면 아래와 같다.
 
 $$PE_{(pos, 2i)} = \sin(pos / 10000^{2i/d_{\text{model}}})$$
 
 $$PE_{(pos, 2i+1)} = \cos(pos / 10000^{2i/d_{\text{model}}})$$
 
+$10000^{2i/d_{\text{model}}}$ 를 $\text{exp}(2i \times \log 10000 / d_{\text{model}})$으로 변형시켜서 각각의 pos로 결합하는 식으로 코드를 짰다. 
+
+```python
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, max_len):
+        super(PositionalEncoding, self).__init__()
+        self.register_buffer("pe", self._get_pe(d_model, max_len))
+
+    def _get_pe(self, d_model, max_len):
+        pe = torch.zeros(max_len, d_model)
+        pe.requires_grad = False
+
+        position = torch.arange(0, max_len).unsqueeze(1).float()  # (max_len, 1)
+
+        div_term = torch.exp(
+            torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model)
+        )  # (d_model/2,)
+
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+
+        return pe
+
+    def forward(self, x):
+        x = x + self.pe[:x.shape[1]]
+        return x
+```
+
 ### Overall
-
-![Transformer4](assets/img/transformer4.png)
-
