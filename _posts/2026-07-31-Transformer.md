@@ -72,6 +72,12 @@ Mask레이어에서 해당 부분을 $-\infty$ 값으로 만들어 버리고 나
 
 ### 코드
 
+우선 n_heads로 나누고 linear를 하는것 보단 한꺼번에 linear시키고 n_heads 만큼 잘라내는 것이 좋을 거 같아서 Linear을 입력 출력 차원을 같게 해 놓은것을 볼 수 있다.
+
+q,k,v를 (배치 크기,시퀀스 길이,차원) 이렇게 구성되어 있었는데 이것을 (배치크기, 시퀀스 길이, heads, head 차원)으로 만들었다.
+
+이리저리 transpose하는것 보단 einsum이라는 좋은게 있어서 그것을 이용해서 코드를 짰다. 다음 코드를 참고하면 된다.
+
 ```python
 class SelfAttention(nn.Module):
   def __init__(self, d_model, heads, dropout=0.0,qkv_bias=False):
@@ -114,6 +120,8 @@ class SelfAttention(nn.Module):
 
     return self.out_fc(out)
 ```
+
+외부에서 mask를 받아서 causal attention을 만들것인데 이건 더 필요한 개념이 있어서 나중에 설명하겠다. 
 
 ## Architecture
 
@@ -185,4 +193,61 @@ class PositionalEncoding(nn.Module):
         return x
 ```
 
+### Mask
+
+Causal Attention처럼 Q기준에서 계산을 하면 안 되는 부분이 또 존재한다. 시퀀스를 넣는 길이를 일정하게 만들기 위해서 <PAD>를 넣어 패딩을 한다. <PAD>는 그냥 길이만 맞출려고 넣은 것이므로 쿼리에서는 이것을 문자로 처리하면 안 된다. Causal attention처럼 위에 나왔던 것 처럼 단순히 Pad에 대한 부분을 $-\infty$로 만들면 된다. 이는 논문에 없고 내가 추가한 부분이다. 코드는 아래와 같다.
+
+```python
+class Transformer(nn.Module):
+  def __init__(self,cfg):
+    super(Transformer,self).__init__()
+    #self.encoder=Encoder(cfg)
+    #self.decoder=Decoder(cfg)
+    self.device=cfg["device"]
+    self.pad_idx = cfg["pad_idx"]
+
+  def make_src_mask(self,src):
+    #query쪽은 신경 ㄴㄴ Key 쪽에서만 padding 처리
+    batch_size,seq_len=src.shape
+    mask = (src != self.pad_idx).unsqueeze(1).unsqueeze(2)
+    return mask.to(self.device)
+
+  def make_trg_mask(self,trg):
+    batch_size, seq_len = trg.shape
+    pad_mask = (trg != self.pad_idx).unsqueeze(1).unsqueeze(2)
+    causal_mask = torch.tril(torch.ones(seq_len, seq_len, device=self.device)).bool()
+    causal_mask = causal_mask.unsqueeze(0).unsqueeze(0)
+    return (pad_mask & causal_mask).to(self.device)
+
+  def forward(self,src,trg):
+    # ...
+```
+
+src와 trg값은 각각 입력 출력 값이다.
+
 ### Overall
+
+파라미터를 객체에 계속 뭐넣어라 뭐 넣어라 하면 좀 걸리적 거린다. 밑바닥부터 만들면서 배우는 LLM의 저자 *세바스찬 라시카*는 아예 변수를 이렇게 만들어 버렸다.
+
+```python
+TRANSFORMER_BASE_CONFIG={
+    "vocab_size":VOCAB_SIZE,
+    "max_len":1024,
+    "d_model":512,
+    "n_heads":8,
+    "n_layers":6,
+    "drop_attn":0.1,
+    "drop_res":0.2,
+    "drop_emb":0.2,
+    "pad_idx":PAD_ID,
+    "qkv_bias": False,
+    "device": 'cuda' if torch.cuda.is_available() else 'cpu'
+}
+```
+
+나도 이 아이디어를 빌렸다. Transformer객체에 cfg를 받는것을 볼 수 있는데, 이걸 받는것이다.
+
+![Transformer4-1](assets/img/transformer4.png)
+
+아무튼 구조가 위에 것과 같이 나타나는데 Encoder와 Decoder블럭이 각각 N개(6개)씩 이어져 있고 그리고 그걸 다 받는 Encoder_block Decoder_block을 만들어야 된다.
+
