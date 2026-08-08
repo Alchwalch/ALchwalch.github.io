@@ -1,6 +1,6 @@
 ---
 title: "Transformer (Implementation)"
-date: 2026-07-31 18:30:00 +0900
+date: 2026-08-06 18:30:00 +0900
 math: true
 categories: [DeepLearning]
 tags: [DeepLearning]
