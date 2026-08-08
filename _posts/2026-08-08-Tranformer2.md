@@ -341,4 +341,77 @@ VOCAB_SIZE = sp.get_piece_size()
 그런다음 SentencePieeceTrainer로 BPE알고리즘으로 토크나이징 시킨다. 
 input이 위에서 만든 en-de 쌍이다.
 
+```python
+class SPTokenizerWrapper:
+    def __init__(self, sp):
+        self.sp = sp
+    def encode(self, text):
+        return self.sp.encode(text, out_type=int)
+    def decode(self, ids):
+        return self.sp.decode(ids)
+
+tokenizer = SPTokenizerWrapper(sp)
+```
+
+그리고 위와 같이 tokenizer 클래스를 구현하면 끝난다.
+
 ![transformer8](assets/img/transformer8.png)
+
+아래와 같은 python코드로 번역기를 만들어 봤다.
+generate함수는 이전 블로그에 설명했다.
+
+```python
+print("번역기 (영어 -> 독일어)")
+
+prompt=input("영어 문장을 입력하세요: ")
+
+token_ids=generate(
+    model,
+    text_to_token_ids(prompt,tokenizer),
+    max_new_token=128,
+    max_length=128,
+    temperature=1.0,
+    top_k=5,
+    device=TRANSFORMER_BASE_CONFIG["device"]
+)
+
+print("출력 텍스트: ", token_ids_to_text(token_ids,tokenizer))
+```
+
+결과는 아래와 같았다.
+
+```text
+번역기 (영어 -> 독일어) 
+영어 문장을 입력하세요: The committee will vote on the proposal next week. 
+출력 텍스트:  Der Ausschuß wird über die nächste Lesung abstimmen.
+
+번역기 (영어 -> 독일어) 
+영어 문장을 입력하세요: Rising energy prices have affected millions of households. 
+출력 텍스트:  Die Preise für energiegeladene Energien sind von Bedeutung.
+
+번역기 (영어 -> 독일어)
+영어 문장을 입력하세요: The two countries agreed to strengthen trade relations.
+출력 텍스트:  Die Beziehungen von Agenten vereinbarte sich darauf, die Handelsbeziehungen zu stärken.
+```
+
+결과를 분석해보자. 
+Der Ausschuß wird über die nächste Lesung abstimmen. 이 문장을 영어로 번역하면 "The committee will vote on the next reading." 이다. "Der Ausschuß wird über die nächste" 이 부분이 The committee will vote on the next... 부분인데 proposal 하고 week가 빠진것 빼고는 잘 번역이 되었다.
+
+아래도 비슷하다 Die Preise für energiegeladene Energien sind von Bedeutung.
+는 The prices for energy-rich energy sources are important.라는 뜻이다. Rising energy prices 정도만 번역이 되었다.
+
+뭔가 그럴듯하게 보이지만 사실 위에 문장은 데이터셋에 맞춘 문장이고 우리가 평상시 사용하는 문장을 대입해보면 성능이 좋지는 않다는것을 알 수가 있다.
+
+```text
+번역기 (영어 -> 독일어)
+영어 문장을 입력하세요: I love you
+출력 텍스트: Ich bin sehr gutes Wert, und wir habe Ihr gutes Wert gehabt, wenn es nicht gab.
+```
+
+Ich 빼고는 뭔 완전 딴 소리를 늘어지게 하고 있다.
+
+이문제는 진단을 2가지로 봤다.
+- dropout rate를 너무 높임
+- 데이터셋을 너무 적게함
+
+사실 두 번째 이유가 가장 크고 더 늘려보려고 했지만 내가 공부하는 환경(군대)에서는 더 건드리기 힘든 환경이여서 여기까지 했다.
