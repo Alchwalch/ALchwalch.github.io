@@ -6,7 +6,7 @@ categories: [DeepLearning]
 tags: [DeepLearning]
 ---
 
-## 1차
+## 파운데이션
 
 ### Dataset
 
@@ -222,3 +222,123 @@ validation, train에 대한 평가를 매 epoch에서 기록함. 결과가 다�
 
 ![transformer6](assets/img/transformer6.png)
 
+문제점이 여러가지가 있었음.
+
+- overfitting
+- 학습속도가 너무 느림
+- 저장 간격이 너무 긺
+
+## 1차 개선
+
+- overfitting
+
+dropout_rate를 높이고 label_smoothing을 하기로 함.
+
+```python
+TRANSFORMER_BASE_CONFIG={
+    "vocab_size":VOCAB_SIZE,
+    "max_len":1024,
+    "d_model":512,
+    "n_heads":8,
+    "n_layers":6,
+    "drop_attn":0.1,
+    "drop_res":0.2,
+    "drop_emb":0.2,
+    "pad_idx":PAD_ID,
+    "qkv_bias": False,
+    "device": 'cuda' if torch.cuda.is_available() else 'cpu'
+}
+```
+
+```python
+def calc_loss_batch(input_batch,target_batch,model,device,label_smoothing=0.1):
+  input_batch=input_batch.to(device)
+  target_batch=target_batch.to(device)
+
+  tgt_input=target_batch[:,:-1]
+  tgt_output=target_batch[:,1:]
+  out=model(input_batch,tgt_input)
+
+  loss=F.cross_entropy(out.reshape(-1,out.shape[-1]),tgt_output.reshape(-1),ignore_index=PAD_ID, label_smoothing=label_smoothing)
+
+  return loss
+```
+
+(원래 label_smoothing은 train에서만 진행해야 하는데 초반에 그거 생각 못하고 val,test를 포함해서 3개를 smoothing을 박아버림...)
+
+- 학습속도 개선
+
+GradScaler를 적용함.
+
+```python
+device = TRANSFORMER_BASE_CONFIG["device"]
+use_amp = (device == "cuda")
+
+scaler = torch.amp.GradScaler(device, enabled=use_amp)
+```
+
+이렇게 하고 모델 계산 할때마다 다음과 같이 적용 시키면 됨.
+
+```python
+
+# ...
+
+with torch.amp.autocast(device, enabled=use_amp):
+  loss = calc_loss_batch(input_batch, target_batch, model, device, label_smoothing=0.1)
+
+# ...
+
+```
+
+- 저장간격
+
+에포크마다가 아닌 500 이터레이션 마다 저장하는 걸로 수정.
+
+결과는 다음과 같아짐.
+
+![transformer7](assets/img/transformer7.png)
+
+## 2차 개선
+
+Tokenizer 개선함. GPT2에 사용한 BPE토크나이저 보단 아예 WMT14 en-de에 맞는 BPE를 만드는 것이 좋다고 생각함.
+
+```python
+train_dataset=dataset["train"].shuffle(seed=67).select(range(640_000))
+val_dataset=dataset["validation"]
+test_dataset=dataset["test"]
+
+with open("en_de_combined.txt", "w", encoding="utf-8") as f:
+    for item in train_dataset:   # train만
+        pair = item["translation"]
+        f.write(pair["en"].strip() + "\n")
+        f.write(pair["de"].strip() + "\n")
+```
+
+train_dataset을 64만개로 늘렸다. train dataset을 뽑아서 en-de pair를 만든다.
+
+```python
+import sentencepiece as spm
+
+spm.SentencePieceTrainer.train(
+    input="en_de_combined.txt",
+    model_prefix="wmt14_bpe",
+    vocab_size=32000,
+    model_type="bpe",
+    character_coverage=1.0,
+    pad_id=0, unk_id=1, bos_id=2, eos_id=3,
+)
+
+sp = spm.SentencePieceProcessor()
+sp.load("wmt14_bpe.model")
+
+PAD_ID = sp.pad_id()
+UNK_ID = sp.unk_id()
+BOS_ID = sp.bos_id()
+EOS_ID = sp.eos_id()
+VOCAB_SIZE = sp.get_piece_size()
+```
+
+그런다음 SentencePieeceTrainer로 BPE알고리즘으로 토크나이징 시킨다. 
+input이 위에서 만든 en-de 쌍이다.
+
+![transformer8](assets/img/transformer8.png)
