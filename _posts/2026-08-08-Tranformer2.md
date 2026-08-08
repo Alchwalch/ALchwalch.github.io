@@ -167,8 +167,14 @@ scheduler = LambdaLR(
 
 calc_loss_batch는 이터레이션 한 번 돌때마다 배치단위로 cross_entropy를 추적하는 함수임.
 
+$$P(w_1, \dots , w_{m})=\Pi_{t=1}^m P(w_t \mid w_1, \dots, w_{t-1})$$
+
+$$\sum_{t=1}^m \log P(w_t \mid w_1, \dots , w_{t-1})$$
+
+이므로 정답에 대해 cross_entropy로 나타낼 수 있음. 밑바닥 부터 만들면서 배우는 LLM참고함.
+
 ```python
-def calc_loss_batch(input_batch,target_batch,model,device,label_smoothing=0.0):
+def calc_loss_batch(input_batch,target_batch,model,device):
   input_batch=input_batch.to(device)
   target_batch=target_batch.to(device)
 
@@ -176,7 +182,41 @@ def calc_loss_batch(input_batch,target_batch,model,device,label_smoothing=0.0):
   tgt_output=target_batch[:,1:]
   out=model(input_batch,tgt_input)
 
-  loss=F.cross_entropy(out.reshape(-1,out.shape[-1]),tgt_output.reshape(-1),ignore_index=PAD_ID, label_smoothing=label_smoothing)
+  loss=F.cross_entropy(out.reshape(-1,out.shape[-1]),tgt_output.reshape(-1),ignore_index=PAD_ID)
 
   return loss
 ```
+
+이거는 loader 전체에 대해서 나타내는 loss 함수. val과 test에서 썼음. 이것도 밑바닥 부터 만들면서 배우는 LLM 참고함.
+
+```python
+def calc_loss_loader(data_loader,model,device,num_batches=None):
+  total_loss=0
+  if len(data_loader) == 0:
+    return float("nan")
+  elif num_batches is None:
+    num_batches=len(data_loader)
+  else:
+    num_batches=min(num_batches,len(data_loader))
+
+  for i,(src,trg) in enumerate(data_loader):
+    if i >= num_batches:
+      break
+
+    loss=calc_loss_batch(src,trg,model,device)
+    total_loss+=loss.item()
+
+  return total_loss/num_batches
+
+def evaluate_model(model, data_loader, device,eval_iter):
+    model.eval()
+    with torch.no_grad(), torch.amp.autocast(device, enabled=use_amp):
+        loss=calc_loss_loader(data_loader,model,device,eval_iter)
+    model.train()
+    return loss
+```
+
+### 결과
+
+validation, train에 대한 평가를 매 epoch에서 기록함. 결과가 다음과 같아짐.
+
