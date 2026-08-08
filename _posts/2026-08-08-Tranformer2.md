@@ -220,3 +220,5 @@ def evaluate_model(model, data_loader, device,eval_iter):
 
 validation, train에 대한 평가를 매 epoch에서 기록함. 결과가 다음과 같아짐.
 
+![transformer6](assets/img/transformer6.png)
+
