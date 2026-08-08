@@ -397,3 +397,84 @@ class Transformer(nn.Module):
 ```
 
 ## generate text
+
+text를 생성하는 건 Seq2Seq와 유사하다. Seq2Seq에서는 한 토큰을 입력하면 출력해서 나온 토큰을 다시 입력하는 방식이었다. Transformer도 이와 유사한 방식으로 작동하지만 이 모델은 Seq2Seq와 달리 토큰별로 넣지 않고 정해진 max_len범위 내에서의 토큰덩어리들을 집어 넣는다. 예를 들어, "I love"를 디코더로 입력했으면 그 출력은 "I love you" 로 나온다. 즉, 새로운 토큰과 그 이전의 history도 나오는 방식이다. 디코더출력에서 확률이 제일 높은것 하나를 선택하는 방식을 **Greedy Decoding** 방식이다.
+
+```python
+def generate(model, src, max_new_token, max_length, temperature=0.0, top_k=None, device='cpu'):
+    model.eval()
+    src = src.to(device)
+    src_mask = model.make_src_mask(src)
+    with torch.amp.autocast(device, enabled=use_amp):
+        encoder_out = model.encoder(src, src_mask)
+
+    idx = torch.tensor([[BOS_ID]], device=device)
+    for _ in range(max_new_token):
+        idx_cond = idx[:, -max_length:]
+        trg_mask = model.make_trg_mask(idx_cond)
+
+        with torch.amp.autocast(device, enabled=use_amp):
+            logits = model.decoder(idx_cond, encoder_out, trg_mask, src_mask)
+
+        logits = logits[:, -1, :]
+
+        idx_next = torch.argmax(logits, dim=-1, keepdim=True)
+
+        if idx_next.item() == EOS_ID:
+            break
+
+        idx = torch.cat((idx, idx_next), dim=1)
+
+    return idx
+```
+
+하지만 다양성 높은 텍스트를 생성할 수가 없으므로, **온도 스케일링** 방식과 **top-k sampling** 방식을 사용한다.
+
+- Temperature Scaling
+
+온도 스케일링은 로짓을 0보다 큰 수로 나누어서 분포와 선택과정을 제어한다.
+
+- top-k sampling
+
+확률이 제일 높은 k개만을 남겨두고 나머지는 $-\infty$로 만들어 놓는 방식이다. 말도 안 되는 단어를 고르면 좀... 그럴 것이다.
+
+코드는 아래와 같이 표현할 수 있다.
+
+```python
+def generate(model, src, max_new_token, max_length, temperature=0.0, top_k=None, device='cpu'):
+    model.eval()
+    src = src.to(device)
+    src_mask = model.make_src_mask(src)
+    with torch.amp.autocast(device, enabled=use_amp):
+        encoder_out = model.encoder(src, src_mask)
+
+    idx = torch.tensor([[BOS_ID]], device=device)
+    for _ in range(max_new_token):
+        idx_cond = idx[:, -max_length:]
+        trg_mask = model.make_trg_mask(idx_cond)
+
+        with torch.amp.autocast(device, enabled=use_amp):
+            logits = model.decoder(idx_cond, encoder_out, trg_mask, src_mask)
+
+        logits = logits[:, -1, :]
+
+        if top_k is not None:
+            v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
+            logits[logits < v[:, [-1]]] = -float("inf")
+
+        if temperature > 0.0:
+            logits = logits / temperature
+            probs = F.softmax(logits, dim=-1)
+            idx_next = torch.multinomial(probs, num_samples=1)
+        else:
+            idx_next = torch.argmax(logits, dim=-1, keepdim=True)
+
+        if idx_next.item() == EOS_ID:
+            break
+
+        idx = torch.cat((idx, idx_next), dim=1)
+
+    return idx
+```
+
+k개 이외 것들을 다 $-\infty$로 처리하고 temperature가 0.0보다 크면 온도 스케일링을 해서 분포에 맞게 샘플링을 취하도록 한다. (0.0이면 greedy decoding을 실시한다.)
