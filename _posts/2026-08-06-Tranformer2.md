@@ -415,3 +415,7 @@ Ich 빼고는 뭔 완전 딴 소리를 늘어지게 하고 있다.
 - 데이터셋을 너무 적게함
 
 사실 두 번째 이유가 가장 크고 더 늘려보려고 했지만 내가 공부하는 환경(군대)에서는 더 건드리기 힘든 환경이여서 여기까지 했다.
+
+## 코드
+
+[Transformer](https://github.com/Alchwalch/Deep-Learning-Study/blob/main/NLP/Transformer.ipynb)
